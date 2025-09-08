@@ -8,7 +8,7 @@ import {Suspense} from 'react';
 import {fetchInvoicesPages} from "@/app/lib/data";
 
 export default async function Page({searchParams}: { searchParams: Promise<{ query?: string; page?: string }> }) {
-    let queryParams = await searchParams;
+    const queryParams = await searchParams;
     const query = queryParams?.query || '';
     const currentPage = Number(queryParams?.page) || 1;
     const totalPages = await fetchInvoicesPages(query);
