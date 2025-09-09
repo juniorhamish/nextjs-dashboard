@@ -5,20 +5,44 @@ import {revalidatePath} from "next/cache";
 import {redirect} from "next/navigation";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
-
+export type State = {
+    errors?: {
+        customerId?: string[];
+        amount?: string[];
+        status?: string[];
+    };
+    message?: string | null;
+};
 const InvoiceSchema = z.object({
     id: z.string(),
-    customerId: z.string(),
-    amount: z.coerce.number(),
-    status: z.enum(['pending', 'paid']),
+    customerId: z.string({
+        invalid_type_error: 'Please select a customer.'
+    }),
+    amount: z.coerce.number().gt(0, { message: 'Please enter an amount greater than $0.' }),
+    status: z.enum(['pending', 'paid'], {
+        invalid_type_error: 'Please select an invoice status.',
+    }),
     date: z.string(),
 });
 const CreateInvoiceSchema = InvoiceSchema.omit({id: true, date: true});
 const UpdateInvoiceSchema = InvoiceSchema.omit({id: true, date: true});
 
-export async function createInvoice(formData: FormData) {
-    const {customerId, amount, status} = CreateInvoiceSchema.parse(Object.fromEntries(formData));
-    await sql`INSERT INTO invoices (customer_id, amount, status, date) values (${customerId}, ${amount * 100}, ${status}, now());`;
+export async function createInvoice(prevState: State, formData: FormData) {
+    const validatedFields = CreateInvoiceSchema.safeParse(Object.fromEntries(formData));
+    if (!validatedFields.success) {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Missing Fields. Failed to Create Invoice.',
+        };
+    }
+    const {customerId, amount, status} = validatedFields.data;
+    try {
+        await sql`INSERT INTO invoices (customer_id, amount, status, date) values (${customerId}, ${amount * 100}, ${status}, now());`;
+    } catch (error) {
+        return {
+            message: 'Database Error: Failed to Create Invoice.',
+        };
+    }
     revalidatePath('/dashboard/invoices');
     redirect('/dashboard/invoices');
 }
